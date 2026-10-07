@@ -27,7 +27,7 @@ const id=x=>x.tripId||[x.line?.name,x.plannedWhen,x.origin?.name].join('|');
 function saved(){try{return JSON.parse(localStorage.getItem(key())||'[]')}catch{return[]}}
 function merge(a,b){let m=new Map(a.map(x=>[id(x),x]));b.forEach(x=>m.set(id(x),{...(m.get(id(x))||{}),...x}));return [...m.values()].sort((a,b)=>new Date(a.plannedWhen)-new Date(b.plannedWhen))}
 function delay(x){return Number.isFinite(x.delay)?Math.round(x.delay/60):(x.when&&x.plannedWhen?Math.round((new Date(x.when)-new Date(x.plannedWhen))/60000):0)}
-function render(a){const f=filter.value.toLowerCase();a=a.filter(x=>!f||JSON.stringify(x).toLowerCase().includes(f));list.innerHTML='';
+function render(a){const f=filter.value.toLowerCase();a=a.filter(x=>{const t=x.plannedWhen?new Date(x.plannedWhen):null;const after7=t&&(t.getHours()>7||(t.getHours()===7&&t.getMinutes()>=0));return after7&&(!f||JSON.stringify(x).toLowerCase().includes(f))});list.innerHTML='';
 if(!a.length){list.innerHTML='<p>Keine passenden Ankünfte gefunden.</p>';return}
 a.forEach(x=>{let d=delay(x),cl=x.cancelled?'cancel':d>=10?'big':d>0?'late':'',st=x.cancelled?'Ausfall':d>0?'+'+d+' Min':'pünktlich';
 let e=document.createElement('div');e.className='card '+cl;e.innerHTML='<div class="row"><span class="train">'+(x.line?.name||'Zug')+'</span><span class="status">'+st+'</span></div><div class="meta">aus '+(x.origin?.name||'unbekannt')+(x.platform?' · Gleis '+x.platform:'')+'</div><div class="meta">Soll <b>'+fmt(x.plannedWhen)+'</b> · Ist <b>'+fmt(x.when)+'</b></div>';list.appendChild(e)})}
