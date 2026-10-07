@@ -1,4 +1,4 @@
-name: Update train data
+name: Coesfeld Zugradar Daten
 
 on:
   workflow_dispatch:
