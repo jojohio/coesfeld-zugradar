@@ -1,57 +1,39 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=180');
-
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('sv-SE', {
-    timeZone:'Europe/Berlin', year:'numeric', month:'2-digit', day:'2-digit',
-    hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
-  }).formatToParts(now);
-  const p = Object.fromEntries(parts.map(x=>[x.type,x.value]));
-  const datum = p.year+'-'+p.month+'-'+p.day;
-  const zeit = p.hour+':'+p.minute+':'+p.second;
-
-  const q = new URLSearchParams({
-    datum, zeit, ortExtId:'8000066', mitVias:'true', maxVias:'8'
-  });
-  ['ICE','EC_IC','IR','REGIONAL','SBAHN'].forEach(v=>q.append('verkehrsmittel[]',v));
-  const url='https://www.bahn.de/web/api/reiseloesung/ankuenfte?'+q.toString();
-
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),8000);
+  const headers = { accept:'application/json', 'user-agent':'Coesfeld-Zugradar/1.0 (open-source school project)' };
+  const get = async (url) => {
+    const c=new AbortController(), t=setTimeout(()=>c.abort(),8000);
+    try {
+      const r=await fetch(url,{headers,signal:c.signal});
+      const body=await r.text();
+      if(!r.ok) throw new Error('Transitous HTTP '+r.status+': '+body.slice(0,180));
+      return JSON.parse(body);
+    } finally { clearTimeout(t); }
+  };
   try {
-    const upstream=await fetch(url,{
-      signal:controller.signal,
-      headers:{
-        'accept':'application/json, text/plain, */*',
-        'accept-language':'de-DE,de;q=0.9',
-        'referer':'https://www.bahn.de/buchung/abfahrten-ankuenfte',
-        'user-agent':'Mozilla/5.0'
-      }
-    });
-    if(!upstream.ok) {
-      const body=(await upstream.text()).slice(0,500);
-      return res.status(200).json({
-        updatedAt:new Date().toISOString(), arrivals:[],
-        diagnostic:true, upstreamStatus:upstream.status,
-        error:'bahn.de HTTP '+upstream.status,
-        upstreamBody:body
-      });
-    }
-    const data=await upstream.json();
-    const entries=Array.isArray(data)?data:(data.entries||[]);
-    const arrivals=entries.map(x=>({
-      tripId:x.journeyId||x.journeyID,
-      line:{name:x.verkehrmittel?.mittelText||x.verkehrmittel?.kurzText||x.verkehrsmittel?.mittelText||x.verkehrsmittel?.kurzText||x.zugName||'Zug'},
-      plannedWhen:x.zeit||null,
-      when:x.ezZeit||x.zeit||null,
-      platform:x.ezGleis||x.gleis||null,
-      plannedPlatform:x.gleis||null,
-      origin:{name:(Array.isArray(x.ueber)&&x.ueber.length?x.ueber[0]:(x.origin||x.start||'unbekannt'))},
-      cancelled:Boolean(x.cancelled||x.canceled||(x.meldungen||[]).some(m=>m.type==='HALT_AUSFALL'))
+    // Resolve the stop dynamically, so the app does not depend on DB EVA/HAFAS IDs.
+    const geo=await get('https://api.transitous.org/api/v1/geocode?text='+encodeURIComponent('Coesfeld Westf')+'&type=STOP');
+    const features=geo.features||[];
+    const feature=features.find(x=>/coesfeld/i.test(x.properties?.name||x.properties?.label||''))||features[0];
+    const stopId=feature?.properties?.id||feature?.properties?.stopId||feature?.id;
+    if(!stopId) throw new Error('Coesfeld (Westf) wurde bei Transitous nicht gefunden');
+    const q=new URLSearchParams({stopId,n:'60',arriveBy:'true',direction:'EARLIER',fetchStops:'true',realtimeMode:'REALTIME',language:'de',withAlerts:'false'});
+    const data=await get('https://api.transitous.org/api/v6/stoptimes?'+q);
+    const arrivals=(data.stopTimes||[]).map(x=>({
+      tripId:x.tripId,
+      line:{name:x.displayName||x.routeShortName||x.tripShortName||'Zug'},
+      plannedWhen:x.place?.scheduledArrival||x.scheduledArrival||null,
+      when:x.place?.arrival||x.arrival||x.place?.scheduledArrival||x.scheduledArrival||null,
+      platform:x.place?.track||null,
+      plannedPlatform:x.place?.scheduledTrack||null,
+      origin:{name:x.tripFrom?.name||'unbekannt'},
+      cancelled:Boolean(x.cancelled||x.tripCancelled),
+      realTime:Boolean(x.realTime),
+      previousStops:x.previousStops||x.stops||[]
     }));
-    return res.status(200).json({updatedAt:new Date().toISOString(),source:'bahn.de',arrivals});
+    return res.status(200).json({updatedAt:new Date().toISOString(),source:'Transitous/MOTIS',stopId,arrivals});
   } catch(e) {
-    return res.status(200).json({updatedAt:new Date().toISOString(),arrivals:[],diagnostic:true,error:e.name==='AbortError'?'bahn.de Zeitüberschreitung':e.message,errorName:e.name});
-  } finally { clearTimeout(timer); }
+    return res.status(200).json({updatedAt:new Date().toISOString(),source:'Transitous/MOTIS',arrivals:[],diagnostic:true,error:e.name==='AbortError'?'Transitous Zeitüberschreitung':e.message});
+  }
 }
