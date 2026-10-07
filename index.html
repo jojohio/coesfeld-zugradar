@@ -17,9 +17,9 @@ button,select{font:inherit;padding:11px;border-radius:10px;border:1px solid #d1d
 <main><div class="bar"><button id="reload">Aktualisieren</button>
 <select id="filter"><option value="">Alle Richtungen</option><option>Dülmen</option><option>Münster</option><option>Dortmund</option><option>Gronau</option><option>Dorsten</option></select></div>
 <div id="stamp" class="small">Lade Daten …</div><div id="list"></div>
-<p class="small">Live-Daten über db.transport.rest. Bereits geladene Ankünfte werden für den aktuellen Tag lokal auf diesem Gerät gespeichert.</p></main>
+<p class="small">Die Zugdaten werden automatisch über GitHub aktualisiert. Bereits geladene Ankünfte werden zusätzlich lokal auf diesem Gerät gespeichert.</p></main>
 <script>
-const API='https://v6.db.transport.rest/stops/8000066/arrivals?duration=240&results=100&stopovers=true&remarks=true&language=de';
+const API='./data/arrivals.json';
 const list=document.querySelector('#list'),stamp=document.querySelector('#stamp'),filter=document.querySelector('#filter');
 const day=()=>new Date().toISOString().slice(0,10),key=()=> 'coesfeld-zugradar:'+day();
 const fmt=x=>x?new Date(x).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'–';
@@ -31,6 +31,6 @@ function render(a){const f=filter.value.toLowerCase();a=a.filter(x=>!f||JSON.str
 if(!a.length){list.innerHTML='<p>Keine passenden Ankünfte gefunden.</p>';return}
 a.forEach(x=>{let d=delay(x),cl=x.cancelled?'cancel':d>=10?'big':d>0?'late':'',st=x.cancelled?'Ausfall':d>0?'+'+d+' Min':'pünktlich';
 let e=document.createElement('div');e.className='card '+cl;e.innerHTML='<div class="row"><span class="train">'+(x.line?.name||'Zug')+'</span><span class="status">'+st+'</span></div><div class="meta">aus '+(x.origin?.name||'unbekannt')+(x.platform?' · Gleis '+x.platform:'')+'</div><div class="meta">Soll <b>'+fmt(x.plannedWhen)+'</b> · Ist <b>'+fmt(x.when)+'</b></div>';list.appendChild(e)})}
-async function load(){stamp.textContent='Live-Daten werden geladen …';try{let r=await fetch(API);if(!r.ok)throw Error('HTTP '+r.status);let j=await r.json(),fresh=Array.isArray(j)?j:(j.arrivals||[]),all=merge(saved(),fresh);localStorage.setItem(key(),JSON.stringify(all));render(all);stamp.textContent='Aktualisiert: '+new Date().toLocaleTimeString('de-DE')}catch(e){render(saved());stamp.innerHTML='<span class="error">Live-Abruf fehlgeschlagen: '+e.message+'</span>'}}
+async function load(){stamp.textContent='Live-Daten werden geladen …';try{let r=await fetch(API);if(!r.ok)throw Error('HTTP '+r.status);let j=await r.json(),fresh=j.arrivals||[],all=merge(saved(),fresh);localStorage.setItem(key(),JSON.stringify(all));render(all);stamp.textContent='Datenstand: '+(j.updatedAt?new Date(j.updatedAt).toLocaleTimeString('de-DE'):'unbekannt')}catch(e){render(saved());stamp.innerHTML='<span class="error">Live-Abruf fehlgeschlagen: '+e.message+'</span>'}}
 document.querySelector('#reload').onclick=load;filter.onchange=()=>render(saved());load();
 </script></body></html>
