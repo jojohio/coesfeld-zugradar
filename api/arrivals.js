@@ -29,7 +29,15 @@ export default async function handler(req, res) {
         'user-agent':'Mozilla/5.0'
       }
     });
-    if(!upstream.ok) throw new Error('bahn.de HTTP '+upstream.status);
+    if(!upstream.ok) {
+      const body=(await upstream.text()).slice(0,500);
+      return res.status(200).json({
+        updatedAt:new Date().toISOString(), arrivals:[],
+        diagnostic:true, upstreamStatus:upstream.status,
+        error:'bahn.de HTTP '+upstream.status,
+        upstreamBody:body
+      });
+    }
     const data=await upstream.json();
     const entries=Array.isArray(data)?data:(data.entries||[]);
     const arrivals=entries.map(x=>({
@@ -44,6 +52,6 @@ export default async function handler(req, res) {
     }));
     return res.status(200).json({updatedAt:new Date().toISOString(),source:'bahn.de',arrivals});
   } catch(e) {
-    return res.status(e.name==='AbortError'?504:502).json({updatedAt:new Date().toISOString(),arrivals:[],error:e.name==='AbortError'?'bahn.de Zeitüberschreitung':e.message});
+    return res.status(200).json({updatedAt:new Date().toISOString(),arrivals:[],diagnostic:true,error:e.name==='AbortError'?'bahn.de Zeitüberschreitung':e.message,errorName:e.name});
   } finally { clearTimeout(timer); }
 }
