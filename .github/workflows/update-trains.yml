@@ -1,32 +1,37 @@
 name: Update train data
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/10 4-12 * * 1-5'
+    - cron: "*/15 4-12 * * 1-5"
+
 permissions:
   contents: write
+
 jobs:
-  update:
+  update-trains:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Fetch Coesfeld arrivals
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Coesfeld arrivals
+        shell: bash
         run: |
           mkdir -p data
-          curl --fail --retry 3 --connect-timeout 15 --max-time 30             -H 'Accept: application/json'             'https://v6.db.transport.rest/stops/8000066/arrivals?duration=360&results=100&stopovers=true&remarks=true&language=de'             -o /tmp/arrivals.json
-          python3 - <<'PY'
-          import json, datetime, pathlib
-          src=json.load(open('/tmp/arrivals.json'))
-          arrivals=src if isinstance(src,list) else src.get('arrivals',[])
-          out={'updatedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'arrivals':arrivals}
-          pathlib.Path('data').mkdir(exist_ok=True)
-          json.dump(out,open('data/arrivals.json','w'),ensure_ascii=False,separators=(',',':'))
-          PY
-      - name: Commit updated data
+          curl -fL --retry 3             "https://v6.db.transport.rest/stops/8000066/arrivals?duration=360&results=100"             -o data/raw.json
+          python3 -c 'import json,datetime; p="data/raw.json"; x=json.load(open(p)); a=x if isinstance(x,list) else x.get("arrivals",[]); json.dump({"updatedAt":datetime.datetime.now(datetime.timezone.utc).isoformat(),"arrivals":a},open("data/arrivals.json","w"),ensure_ascii=False)'
+          rm data/raw.json
+
+      - name: Save data
+        shell: bash
         run: |
-          git config user.name 'Coesfeld Zugradar Bot'
-          git config user.email 'actions@users.noreply.github.com'
+          git config user.name "Coesfeld Zugradar Bot"
+          git config user.email "actions@users.noreply.github.com"
           git add data/arrivals.json
-          git diff --cached --quiet && exit 0
-          git commit -m 'Update live train data'
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Update train data"
+            git push
+          fi
