@@ -17,9 +17,9 @@ button,select{font:inherit;padding:11px;border-radius:10px;border:1px solid #d1d
 <main><div class="bar"><button id="reload">Aktualisieren</button>
 <select id="filter"><option value="">Alle Richtungen</option><option>Dülmen</option><option>Münster</option><option>Dortmund</option><option>Gronau</option><option>Dorsten</option></select></div>
 <div id="stamp" class="small">Lade Daten …</div><div id="list"></div>
-<p class="small">Die Zugdaten werden automatisch über GitHub aktualisiert. Bereits geladene Ankünfte werden zusätzlich lokal auf diesem Gerät gespeichert.</p></main>
+<p class="small">Die Zugdaten werden live über den Zugradar-Server geladen. Bereits geladene Ankünfte werden zusätzlich lokal auf diesem Gerät gespeichert.</p></main>
 <script>
-const API='./data/arrivals.json';
+const API=location.hostname.endsWith('.vercel.app')?'/api/arrivals':'https://coesfeld-zugradar.vercel.app/api/arrivals';
 const list=document.querySelector('#list'),stamp=document.querySelector('#stamp'),filter=document.querySelector('#filter');
 const day=()=>new Date().toISOString().slice(0,10),key=()=> 'coesfeld-zugradar:'+day();
 const fmt=x=>x?new Date(x).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'–';
